@@ -1,4 +1,3 @@
-// CURSED SFINAE IN THIS FILE, DO NOT LOOK!
 #ifndef FT_LEX_REGEXWRAPPER_HPP
 #define FT_LEX_REGEXWRAPPER_HPP
 #include <tuple>
@@ -34,16 +33,19 @@ private:
 		const std::regex &regex;
 	public:
 		reg_match_function_object(const std::regex &r) : regex(r) {}
-		template <typename... ArgsTypes, std::enable_if_t<(std::is_same_v<std::regex_constants::match_flag_type, ArgsTypes> || ...), bool> = true >
-		bool operator()(ArgsTypes... args) {
-			std::tuple<ArgsTypes...> t{args...};
+		template <typename... ArgsTypes, std::enable_if_t<(std::is_convertible_v<std::regex_constants::match_flag_type, ArgsTypes> || ...), bool> = true >
+		bool operator()(ArgsTypes&... args) {
+			std::tuple<ArgsTypes&...> t{args...};
 			return drop_last([&](auto... elems){
 				return std::regex_match(elems..., this->regex, std::get<std::regex_constants::match_flag_type>(t));
 			}, args...);
 		}
 		template <typename... ArgsTypes, std::enable_if_t<!(std::is_same_v<std::regex_constants::match_flag_type, ArgsTypes> || ...), bool> = true >
-		bool operator()(ArgsTypes... args) {
+		bool operator()(ArgsTypes&... args) {
 			return std::regex_match(args..., this->regex, std::regex_constants::match_default);
+		}
+		operator const std::regex &() const{
+			return this->regex;
 		}
 	};
 public:
@@ -53,4 +55,4 @@ public:
 
 extern RegexWrapper regw;
 
-#endif //FT_LEX_REGEXWRAPPER_HPP
+#endif

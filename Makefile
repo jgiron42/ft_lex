@@ -1,8 +1,9 @@
-NAME = scop
+NAME = ft_lex
 
 SRCS =	main.cpp \
 		LexParser.cpp \
-		RegexWrapper.cpp
+		RegexWrapper.cpp \
+		Nfa.cpp
 
 SRCS_DIR = srcs
 
