@@ -1,9 +1,10 @@
 NAME = ft_lex
 
 SRCS =	main.cpp \
-		LexParser.cpp \
+		LexConfig.cpp \
 		RegexWrapper.cpp \
-		Nfa.cpp
+		LexRegex.cpp \
+		generator.cpp
 
 SRCS_DIR = srcs
 
