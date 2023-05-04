@@ -98,7 +98,7 @@ void LexConfig::parseDefSection() {
 
 bool		is_bracket_balanced(std::string s)
 {
-	s = std::regex_replace(s, (const std::regex &)regw["(" REG_CSTRING ")|(" REG_C_MULTILINE_COMMENT ")"], ""); // get rid of c strings and comments
+	s = std::regex_replace(s, (const std::regex &)regw["(" REG_CSTRING ")|(" REG_C_MULTILINE_COMMENT ")|(" REG_CHAR_LITERAL ")"], ""); // get rid of c strings and comments
 	if (regw["(" REG_PARTIAL_CSTRING ")|(" REG_C_PARTIAL_MULTILINE_COMMENT ")"](s)) // if the string contain an unfinished comment or string
 		return false;
 	int bracket = 0;
@@ -211,313 +211,79 @@ void LexConfig::parseUserSubroutinesSection() {
 	}
 }
 
-void LexConfig::serialize_states(generator &g) {
+void LexConfig::serialize_states() {
+	std::string s;
 	for (auto &p : this->states)
-		g.put("#define " + p.first + " " + std::to_string(p.second.nfa_state - 1));
+		s.append("#define " + p.first + " " + std::to_string(p.second.nfa_state - 1) + '\n');
+	this->generator.set("STATES_DEFINITION", s);
 }
 
-void LexConfig::serialize_accept(generator &g) {
-	g.put("int yyaccept_table[] = { ").indent();
+void LexConfig::serialize_accept() {
+	std::string s;
+	s.append("{ ");
 	std::string line;
 	for (auto &s : dfa_type::all_states)
 		line.append(std::to_string(s.accept) + ", ");
-	g.put(line).dedent().put("};");
+	s.append(line).append("}\n");
+	this->generator.set("ACCEPTS", s);
 }
 
-void LexConfig::serialize_transitions(generator &g) {
-	g.put("int yytransitions[][258] = {").indent();
+void LexConfig::serialize_transitions() {
+
+	std::string ret;
+	ret += "{\n";
 	for (size_t i = 0; i < dfa_type::all_states.size(); i++)
 	{
 		auto &s = dfa_type::all_states[i];
-		g.put("{").indent();
+		ret += "{\n";
 		std::string line;
 		for (int sym = 0; sym < alphabet_size; sym++)
 		{
 			if (sym != 0)
-				line.append(", ");
+				ret.append(", ");
 			if (!(sym % 16))
-			{
-				g.put(line);
-				line.clear();
-			}
-			line += std::to_string(s.transitions[sym]);
+				ret.push_back('\n');
+			ret += std::to_string(s.transitions[sym]);
 		}
-		g.put(line);
-		line.clear();
-		g.dedent().put("}" + std::string(i + 1 == dfa_type::all_states.size() ? "" : ","));
+		ret.push_back('\n');
+		ret.append("}" +  std::string(i + 1 == dfa_type::all_states.size() ? "" : ","));
 	}
-	g.dedent().put("};");
+	ret.append("}\n");
+	this->generator.set("TRANSITIONS", ret);
+
 }
 
-void LexConfig::serialize_rules(generator &g)
+void LexConfig::serialize_rules()
 {
-	g.put("switch(yyaccepted)")
-	.put("{")
-	.indent()
-	.put("case 0:")
-	.put("ECHO;")
-	.put("break;");
+	std::string s;
 	for (auto &e : extra_rules)
 	{
-		g.put("case " + std::to_string(e.regex.id) + ":");
-		g.indent().put(e.frag).dedent();
-		g.put("break;");
+		s += "case " + std::to_string(e.regex.id) + ":";
+		s += "\n"  + e.frag + "\n";
+		s += "break;";
 	}
 	for (auto &e : rules)
 	{
-		g.put("case " + std::to_string(e.regex.id) + ":");
+		s += "case " + std::to_string(e.regex.id) + ":";
 		if (!regw["\\|[[:blank:]]*"](e.frag)) {
-			g.indent().put(e.frag).dedent();
-			g.put("break;");
+			s += "\n"  + e.frag + "\n";
+			s += "break;";
 		}
 		else
-			g.put(";");
+			s += ";\n";
 	}
-	g.dedent().put("}");
+	this->generator.set("RULES", s);
 }
 
-void LexConfig::serialize_routines(generator &g) {
-	g.put(R"(
-typedef struct {
-	size_t pos;
-	int rule;
-}		yymatch;
-
-yymatch	*yy_match_stack = NULL;
-int		yy_match_stack_size = 0;
-int		yy_match_stack_cap = 0;
-
-void	yy_push_accept(yymatch m)
-{
-	if (yy_match_stack_size + 1 > yy_match_stack_cap)
-	{
-		if (!yy_match_stack_cap)
-			yy_match_stack_cap = 1;
-		else
-			yy_match_stack_cap *= 2;
-		yy_match_stack = (yymatch *)realloc(yy_match_stack, yy_match_stack_cap * sizeof(yymatch));
-	}
-	yy_match_stack[yy_match_stack_size] = m;
-	yy_match_stack_size++;
-}
-
-void yy_pop_match()
-{
-	if (yy_match_stack_size > 0)
-		yy_match_stack_size--;
-}
-
-void yy_clear_stack()
-{
-	yy_match_stack_size = 0;
-}
-
-yymatch yy_top_match()
-{
-	yymatch ret = yy_match_stack[yy_match_stack_size - 1];
-	return ret;
-}
-
-void yy_restore_save()
-{
-	if (yysave)
-	{
-		yy_buffer[yyindex] = yysave;
-		yysave = 0;
-	}
-}
-
-int  yywrap(void);
-
-int yy_read_more()
-{
-	begin:;
-	if (!yyin && yywrap())
-		return 0;
-	static char *line = NULL;
-	static size_t n = 0;
-	int ret = getline(&line, &n, yyin);
-	if (ret == -1 && errno)
-		return 0;
-	if (ret == -1)
-	{
-		if (yywrap())
-			return 0;
-		goto begin;
-	}
-	if (!yy_buffer)
-		yy_buffer = (char*)calloc(ret + 1, 1);
-	else
-		yy_buffer = (char*)realloc(yy_buffer, yyindex + strlen(yy_buffer + yyindex) + ret + 1);
-	strcat(yy_buffer + yyindex, line);
-	return ret;
-}
-
-void	yy_flush_buffer()
-{
-	if (yysave)
-	{
-		yy_buffer[yyindex] = yysave;
-		yysave = 0;
-	}
-	if (yynoflush)
-	{
-		yynoflush = false;
-		return;
-	}
-	memmove(yy_buffer, yy_buffer + yyindex, strlen(yy_buffer + yyindex) + 1);
-	yyindex = 0;
-}
-
-int input(void)
-{
-	if (yysave)
-	{
-		char ret = yysave;
-		yysave = 0;
-		yyindex++;
-		return ret;
-	}
-	if (!yy_buffer[yyindex] && !yy_read_more())
-		return 0;
-	char ret = yy_buffer[yyindex];
-	yyindex++;
-	return ret;
-}
-
-int	unput(char c)
-{
-	if (yyindex == 0)
-		return 0;
-	if (yysave)
-	{
-		yy_buffer[yyindex] = yysave;
-		yysave = c;
-		yyindex--;
-		yy_buffer[yyindex] = 0;
-		return 0;
-	}
-	yyindex--;
-	yy_buffer[yyindex] = c;
-	return 0;
-}
-
-int	yymore()
-{
-	yynoflush = true;
-	return 0;
-}
-
-int  yyless(int n)
-{
-	if (n > yyindex)
-		return 1;
-	if (yysave)
-	{
-		yy_buffer[yyindex] = yysave;
-		yysave = yy_buffer[n];
-		yy_buffer[n] = 0;
-	}
-	yyleng = n;
-	yyindex = n;
-	return 0;
-}
-
-)");
-}
-
-void LexConfig::serialize_yylex(generator &g) {
-	g.put("int yylex(void)")
-	.put("{").indent()
-	.put("static int yy_start_state = INITIAL + 1;")
-	.put("static bool yybol = true;")
-	.put(this->yylex_user_content)
-	.put("if (!yy_buffer && !yy_read_more())")
-	.indent().put("return 0;").dedent()
-	.put("while (1)")
-	.put("{").indent()
-	.put("yy_flush_buffer();")
-	.put("yy_clear_stack();")
-	.put("int yystate = yy_start_state + yybol;")
-	.put("yy_match_begin:;")
-	.put("int yyaccepted = 0;")
-	.put("if (!yy_buffer[0] && !yy_read_more())")
-	.indent().put("return 0;").dedent()
-	.put("while(yystate && (yy_buffer[yyindex] || yy_read_more()))")
-	.put("{")
-	.indent()
-			.put("yystate = yytransitions[yystate - 1][yy_buffer[yyindex]];")
-			.put("yyindex++;")
-		.put("if (yystate && yyaccept_table[yystate - 1])")
-		.indent()
-//			.put("{printf(\"add accept: %c %d\\n\",yy_buffer[yyindex], yyaccept_table[yystate - 1]);yy_push_accept((yymatch){yyindex, yyaccept_table[yystate - 1]});}")
-			.put("yy_push_accept((yymatch){yyindex, yyaccept_table[yystate - 1]});")
-		.dedent()
-	.dedent().put("}")
-	.put("yy_handle_match:;")
-	.put("if (yy_match_stack_size == 0)")
-	.put("{").indent()
-		.put("yyleng = 1;")
-		.put("yyaccepted = 0;")
-	.dedent().put("}")
-	.put("else")
-	.put("{").indent()
-		.put("yyleng = yy_top_match().pos;")
-		.put("yyaccepted = yy_top_match().rule;")
-	.dedent().put("}")
-//	.put("printf(\"accepted: %d\\n\", yyaccepted);")
-	.put("yyindex = yyleng;")
-	.put("yysave = yy_buffer[yyindex];")
-	.put("yybol = (yy_buffer[yyleng - 1] == '\\n');")
-	.put("yy_buffer[yyindex] = 0;");
-	if (is_yytext_an_array)
-	{
-		g.put("memcpy(yytext, yy_buffer, yyleng);")
-		.put("yytext[yyleng] = 0;");
-	}
-	else
-	{
-		g.put("yytext = yy_buffer;");
-	}
-	this->serialize_rules(g);
-	g.dedent().put("}");
-	g.dedent().put("}");
-}
-
-void LexConfig::serialize(std::ostream &out) {
-	generator g(out);
-	g.put(R"(
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <stdbool.h>
-#define ECHO do{printf("%s", yytext);}while(0)
-#define BEGIN yy_start_state = 1 +
-#define CURRENT_START_CONDITION (yy_start_state - 1)
-#define REJECT do{yy_pop_match();yy_buffer[yyindex] = yysave;yysave = 0;goto yy_handle_match;}while(0)
-#ifndef YYLMAX
-# define YYLMAX 10000
-#endif
-)");
-	g.put(this->header_content);
-	this->serialize_states(g);
-	g.put(R"(
-char	*yy_buffer = NULL;
-size_t	yyindex = 0;
-size_t	yyleng = 0;
-FILE	*yyin;
-bool	yynoflush = false;
-char	yysave = 0;
-)");
-	if (is_yytext_an_array)
-		g.put("char yytext[YYLMAX];");
-	else
-		g.put("char *yytext;");
-	this->serialize_transitions(g);
-	this->serialize_accept(g);
-	this->serialize_routines(g);
-	this->serialize_yylex(g);
-	g.put(this->user_subroutines);
+Generator &LexConfig::get_generator() {
+	if (this->is_yytext_an_array)
+		this->generator.set("DEFINES", "#define YY_TEXT_ARRAY 1");
+	this->generator.set("HEADER_CONTENT", this->header_content);
+	this->generator.set("YYLEX_USER_CONTENT", this->yylex_user_content);
+	this->generator.set("USER_SUBROUTINES", this->user_subroutines);
+	this->serialize_accept();
+	this->serialize_rules();
+	this->serialize_transitions();
+	this->serialize_states();
+	return this->generator;
 }

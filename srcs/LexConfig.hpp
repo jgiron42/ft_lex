@@ -6,12 +6,13 @@
 # include <map>
 # include <set>
 # include "LexRegex.hpp"
-# include "generator.hpp"
+# include "Generator.hpp"
 # include "Dfa.hpp"
 # define REG_ESCSEQ R"(\\([^)""\n" R"(]|[0-7]{1,3}|x[[:xdigit:]]{1,2}))"
 # define REG_CESCSEQ R"(\\(.|[0-7]{1,3}|x[[:xdigit:]]{1,2}))"
 # define REG_PARTIAL_CSTRING "\"(" REG_ESCSEQ "|[^\n\"\\\\])*"
 # define REG_CSTRING REG_PARTIAL_CSTRING "\""
+# define REG_CHAR_LITERAL "'(" REG_ESCSEQ "|[^\n\"\\\\])'"
 # define REG_C_PARTIAL_MULTILINE_COMMENT  R"(/\*([^*]|\*[^/])*)"
 # define REG_C_MULTILINE_COMMENT REG_C_PARTIAL_MULTILINE_COMMENT "\\*/"
 // regex that match a lex style regex (does not check the validity of the regex)
@@ -42,6 +43,7 @@ public:
 	};
 	std::list<std::string>				files;
 	std::ifstream						filestream;
+	Generator							generator;
 
 	std::string								yylex_user_content;
 	std::string								header_content;
@@ -69,14 +71,12 @@ private:
 	void					parseDefiniton(const std::string &line);
 	void					parse();
 
-	void					serialize_states(generator &g);
-	void					serialize_routines(generator &g);
-	void					serialize_accept(generator &g);
-	void					serialize_transitions(generator &g);
-	void					serialize_rules(generator &g);
-	void 					serialize_yylex(generator &g);
+	void					serialize_states();
+	void					serialize_accept();
+	void					serialize_transitions();
+	void					serialize_rules();
 public:
-	void					serialize(std::ostream &out);
+	Generator				&get_generator();
 };
 
 

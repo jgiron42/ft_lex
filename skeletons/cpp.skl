@@ -1,0 +1,253 @@
+
+%%[HEADER_CONTENT]%%
+
+%%[STATES_DEFINITION]%%
+
+#include "%%[HEADER_NAME]%%"
+
+yyLexer::yyLexer(std::istream *i) : in(i) {}
+
+int  yywrap(void);
+
+#ifdef YY_COMPLETE_SYMBOL
+std::pair<int, YYSTYPE> yyLexer::yylex()
+{
+	auto &&ret = this->internal_yylex();
+	if (std::holds_alternative<int>(ret))
+		return {std::get<0>(ret), {}};
+	else
+		return std::get<1>(ret);
+}
+#else
+int yyLexer::yylex()
+{
+	return this->internal_yylex();
+}
+#endif
+
+#ifdef YY_COMPLETE_SYMBOL
+	std::variant<int, std::pair<int, YYSTYPE> > yyLexer::internal_yylex()
+#else
+	int yyLexer::internal_yylex()
+#endif
+{
+	static int yy_start_state = INITIAL + 1;
+	static bool yybol = true;
+
+	%%[YYLEX_USER_CONTENT]%%
+
+	if (!yy_buffer && !yy_read_more())
+		return 0;
+	while (1)
+	{
+		yy_flush_buffer();
+		yy_clear_stack();
+		int yystate = yy_start_state + yybol;
+		yy_match_begin:;
+		int yyaccepted = 0;
+		if (!yy_buffer[0] && !yy_read_more())
+			return 0;
+		while(yystate && (yy_buffer[yyindex] || yy_read_more()))
+		{
+			yystate = yytransitions[yystate - 1][yy_buffer[yyindex]];
+			yyindex++;
+			if (yystate && yyaccept_table[yystate - 1])
+				yy_push_accept((yymatch){yyindex, yyaccept_table[yystate - 1]});
+		}
+		yy_handle_match:;
+		if (yy_match_stack_size == 0)
+		{
+			yyleng = 1;
+			yyaccepted = 0;
+		}
+		else
+		{
+			yyleng = yy_top_match().pos;
+			yyaccepted = yy_top_match().rule;
+		}
+		yyindex = yyleng;
+		yysave = yy_buffer[yyindex];
+		yybol = (yy_buffer[yyleng - 1] == '\n');
+		yy_buffer[yyindex] = 0;
+
+
+#ifdef YY_TEXT_ARRAY
+		memcpy(yytext, yy_buffer, yyleng);
+		yytext[yyleng] = 0;
+#else
+		yytext = yy_buffer;
+#endif
+
+		switch(yyaccepted)
+		{
+			case 0:
+				ECHO;
+				break;
+				%%[RULES]%%
+		}
+	}
+}
+
+std::string yyLexer::text()
+{
+	return yytext;
+}
+
+void yyLexer::yy_restore_save()
+{
+	if (yysave)
+	{
+		yy_buffer[yyindex] = yysave;
+		yysave = 0;
+	}
+}
+
+
+int yyLexer::yy_read_more()
+{
+	begin:;
+	if (!*this->in && yywrap())
+		return 0;
+	/*char read_buf[101];
+	int ret;
+	while (in && (ret = in.readsome(read_buf, 100)) == 0);
+	read_buf[ret] = 0;
+	if (in.bad())
+		return 0;
+	std::cout << "ret " << ret << std::endl;
+	if (!yy_buffer)
+		yy_buffer = (char*)calloc(ret + 1, 1);
+	else
+		yy_buffer = (char*)realloc(yy_buffer, yyindex + strlen(yy_buffer + yyindex) + ret + 1);
+	strcat(yy_buffer + yyindex, read_buf);
+	return ret;*/
+	std::string line;
+	std::getline(*in, line);
+	if (!in->eof())
+		line.push_back('\n');
+	if (in->bad())
+		return 0;
+	if (!*in)
+	{
+		if (yywrap())
+			return 0;
+		goto begin;
+	}
+	if (!yy_buffer)
+		yy_buffer = (char*)calloc(line.size() + 1, 1);
+	else
+		yy_buffer = (char*)realloc(yy_buffer, yyindex + strlen(yy_buffer + yyindex) + line.size() + 1);
+	strcat(yy_buffer + yyindex, line.c_str());
+	return line.size();
+}
+
+void	yyLexer::yy_flush_buffer()
+{
+	if (yysave)
+	{
+		yy_buffer[yyindex] = yysave;
+		yysave = 0;
+	}
+	if (yynoflush)
+	{
+		yynoflush = false;
+		return;
+	}
+	memmove(yy_buffer, yy_buffer + yyindex, strlen(yy_buffer + yyindex) + 1);
+	yyindex = 0;
+}
+
+int yyLexer::input(void)
+{
+	if (yysave)
+	{
+		char ret = yysave;
+		yysave = 0;
+		yyindex++;
+		return ret;
+	}
+	if (!yy_buffer[yyindex] && !yy_read_more())
+		return 0;
+	char ret = yy_buffer[yyindex];
+	yyindex++;
+	return ret;
+}
+
+int	yyLexer::unput(char c)
+{
+	if (yyindex == 0)
+		return 0;
+	if (yysave)
+	{
+		yy_buffer[yyindex] = yysave;
+		yysave = c;
+		yyindex--;
+		yy_buffer[yyindex] = 0;
+		return 0;
+	}
+	yyindex--;
+	yy_buffer[yyindex] = c;
+	return 0;
+}
+
+int	yyLexer::yymore()
+{
+	yynoflush = true;
+	return 0;
+}
+
+int  yyLexer::yyless(int n)
+{
+	if (n > yyindex)
+		return 1;
+	if (yysave)
+	{
+		yy_buffer[yyindex] = yysave;
+		yysave = yy_buffer[n];
+		yy_buffer[n] = 0;
+	}
+	yyleng = n;
+	yyindex = n;
+	return 0;
+}
+
+
+
+void	yyLexer::yy_push_accept(yymatch m)
+{
+	if (yy_match_stack_size + 1 > yy_match_stack_cap)
+	{
+		if (!yy_match_stack_cap)
+			yy_match_stack_cap = 1;
+		else
+			yy_match_stack_cap *= 2;
+		yy_match_stack = (yymatch *)realloc(yy_match_stack, yy_match_stack_cap * sizeof(yymatch));
+	}
+	yy_match_stack[yy_match_stack_size] = m;
+	yy_match_stack_size++;
+}
+
+void yyLexer::yy_pop_match()
+{
+	if (yy_match_stack_size > 0)
+		yy_match_stack_size--;
+}
+
+void yyLexer::yy_clear_stack()
+{
+	yy_match_stack_size = 0;
+}
+
+yyLexer::yymatch yyLexer::yy_top_match()
+{
+	yymatch ret = yy_match_stack[yy_match_stack_size - 1];
+	return ret;
+}
+
+int yyLexer::yywrap()
+{
+	// todo
+	return 1;
+}
+
+%%[USER_SUBROUTINES]%%

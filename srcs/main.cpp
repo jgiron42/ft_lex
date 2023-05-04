@@ -1,7 +1,9 @@
 #include <iostream>
 #include <cstring>
 #include "LexConfig.hpp"
-
+#ifndef SKELETONS_PATHS
+# define SKELETONS_PATHS "./"
+#endif
 void print_exception(const std::exception& e, int level = 0) // stolen from cppreference
 {
 	std::cerr << std::string(level, ' ') << "error: " << e.what() << '\n';
@@ -70,26 +72,35 @@ void	print_stats(LexConfig &config, std::ostream &out)
 
 int main(int argc, char **argv)
 {
-	std::string output_file = "lex.yy.c";
+	bool write_to_stdout = false;
+	std::string prefix = "lex";
+	std::string language = "c";
+	std::string root = "./";
 	std::list<std::string> input_files;
 	bool stats = false;
 	std::ostream *stat_output = &std::cout;
 	int ret;
-	while ((ret = getopt(argc, argv, "-tnvo:")) != -1)
+	while ((ret = getopt(argc, argv, "-tnvb:+r:")) != -1)
 		switch (ret)
 		{
 			case 't':
-				output_file = "/dev/stdout";
+				write_to_stdout = true;
 				stat_output = &std::cerr;
 				break;
 			case 'n':
 				stats = false;
 				break;
+			case 'b':
+				prefix = optarg;
+				break;
 			case 'v':
 				stats = true;
 				break;
-			case 'o':
-				output_file = optarg;
+			case 'r':
+				root = std::string(optarg) + '/';
+				break;
+			case '+':
+				language = "c++";
 				break;
 			case 1:
 				input_files.emplace_back(optarg);
@@ -107,11 +118,28 @@ int main(int argc, char **argv)
 		LexConfig config(input_files);
 		compile_nfa(config);
 		compile_dfa();
-		std::ofstream out;
-		out.open(output_file);
-		if (!out.is_open())
-			throw std::runtime_error("Can't open " + output_file + ": " + strerror(errno));
-		config.serialize(out);
+//		config.get_generator().generate("skeletons/c.skl", output_file);
+		if (language == "c")
+		{
+			std::string c_output = prefix + ".yy.c";
+			if (write_to_stdout)
+				c_output = "/dev/stdout";
+			config.get_generator().generate(SKELETONS_PATHS "/c.skl", root + c_output);
+		}
+		else
+		{
+			std::string cpp_output = prefix + ".yy.cpp";
+			std::string hpp_output = prefix + ".yy.hpp";
+			if (write_to_stdout)
+			{
+				cpp_output = "/dev/stdout";
+				hpp_output = "/dev/stdout";
+			}
+			auto &gen = config.get_generator();
+			gen.set("HEADER_NAME", hpp_output);
+			gen.generate(SKELETONS_PATHS "/cpp.skl", root + cpp_output);
+			gen.generate(SKELETONS_PATHS "/hpp.skl", root + hpp_output);
+		}
 		if (stats)
 			print_stats(config, *stat_output);
 	}

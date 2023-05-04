@@ -1,0 +1,81 @@
+#ifndef YY_LEX_HPP
+# define YY_LEX_HPP
+#include <ostream>
+#include <fstream>
+#include <iostream>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <stdbool.h>
+#define ECHO do{printf("%s", yytext);}while(0)
+#define BEGIN yy_start_state = 1 +
+#define CURRENT_START_CONDITION (yy_start_state - 1)
+#define REJECT do{yy_pop_match();yy_buffer[yyindex] = yysave;yysave = 0;goto yy_handle_match;}while(0)
+#ifndef YYLMAX
+# define YYLMAX 10000
+#endif
+
+%%[DEFINES]%%
+
+
+class yyLexer
+{
+protected:
+	std::istream *in;
+private:
+	typedef struct {
+		size_t pos;
+		int rule;
+	}		yymatch;
+	yymatch	*yy_match_stack = NULL;
+	int		yy_match_stack_size = 0;
+	int		yy_match_stack_cap = 0;
+	char	*yy_buffer = NULL;
+	size_t	yyindex = 0;
+	bool	yynoflush = false;
+	char	yysave = 0;
+public:
+	size_t	yyleng = 0;
+#ifdef YY_TEXT_ARRAY
+	char yytext[YYLMAX];
+#else
+	char *yytext;
+#endif
+
+public:
+	yyLexer(std::istream *);
+#ifdef YY_COMPLETE_SYMBOL
+	std::pair<int, YYSTYPE> yylex();
+#else
+	int yylex();
+#endif
+	std::string text();
+private:
+#ifdef YY_COMPLETE_SYMBOL
+	std::variant<int, std::pair<int, YYSTYPE> > internal_yylex();
+#else
+	int internal_yylex();
+#endif
+	int		yy_read_more();
+	int		input(void);
+	int		unput(char c);
+	int		yymore();
+	int		yyless(int n);
+
+	void	yy_push_accept(yymatch m);
+	yymatch	yy_top_match();
+	void	yy_clear_stack();
+	void	yy_pop_match();
+	void	yy_restore_save();
+	void	yy_flush_buffer();
+	int		yywrap();
+
+private:
+	static constexpr int yytransitions[][258] = %%[TRANSITIONS]%%;
+
+	static constexpr int yyaccept_table[] = %%[ACCEPTS]%%;
+};
+
+#endif
