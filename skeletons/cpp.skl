@@ -5,6 +5,11 @@
 
 #include "%%[HEADER_NAME]%%"
 
+#define ECHO do{printf("%s", yytext);}while(0)
+#define BEGIN yy_start_state = 1 +
+#define CURRENT_START_CONDITION (yy_start_state - 1)
+#define REJECT do{yy_pop_match();yy_buffer[yyindex] = yysave;yysave = 0;goto yy_handle_match;}while(0)
+
 yyLexer::yyLexer(std::istream *i) : in(i) {}
 
 int  yywrap(void);
@@ -93,6 +98,11 @@ std::string yyLexer::text()
 	return yytext;
 }
 
+std::istream	*yyLexer::get_stream()
+{
+	return		in;
+}
+
 void yyLexer::yy_restore_save()
 {
 	if (yysave)
@@ -108,19 +118,6 @@ int yyLexer::yy_read_more()
 	begin:;
 	if (!*this->in && yywrap())
 		return 0;
-	/*char read_buf[101];
-	int ret;
-	while (in && (ret = in.readsome(read_buf, 100)) == 0);
-	read_buf[ret] = 0;
-	if (in.bad())
-		return 0;
-	std::cout << "ret " << ret << std::endl;
-	if (!yy_buffer)
-		yy_buffer = (char*)calloc(ret + 1, 1);
-	else
-		yy_buffer = (char*)realloc(yy_buffer, yyindex + strlen(yy_buffer + yyindex) + ret + 1);
-	strcat(yy_buffer + yyindex, read_buf);
-	return ret;*/
 	std::string line;
 	std::getline(*in, line);
 	if (!in->eof())
@@ -153,6 +150,23 @@ void	yyLexer::yy_flush_buffer()
 		yynoflush = false;
 		return;
 	}
+
+	yyline_begin.append(yy_buffer, 0, yyindex);
+	while (yyline_begin.find('\n') != std::string::npos && yyline_begin.find('\n') != yyline_begin.size() - 1)
+		yyline_begin.erase(0, yyline_begin.find('\n') + 1);
+
+	for (int i = 0; i < yyindex; i++)
+		if (yy_buffer[i] == '\n')
+		{
+			this->yylineno++;
+			this->yycolno = 1;
+		}
+		else if (yy_buffer[i] == '\t')
+			this->yycolno += 8 - (this->yycolno % 8);
+		else
+			this->yycolno++;
+
+
 	memmove(yy_buffer, yy_buffer + yyindex, strlen(yy_buffer + yyindex) + 1);
 	yyindex = 0;
 }

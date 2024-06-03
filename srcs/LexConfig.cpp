@@ -3,6 +3,7 @@
 #include <exception>
 #include "RegexWrapper.hpp"
 #include <iostream>
+#include <string.h>
 
 LexConfig::LexConfig(std::list<std::string> files) : files(std::move(files)), is_yytext_an_array(false) {
 	this->states["INITIAL"] = {false, Nfa<258>::new_state()};
@@ -152,7 +153,6 @@ void LexConfig::parseRulesSection()
 			break;
 		else if (line == "%{")
 			this->yylex_user_content += parseInline();
-//		std::cout << line << std::endl;
 		std::match_results<std::string::const_iterator> results;
 		if (!regw[REG_RULE](line, results))
 			throw std::runtime_error("Invalid rule: " + line);

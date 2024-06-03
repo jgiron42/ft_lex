@@ -9,10 +9,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdbool.h>
-#define ECHO do{printf("%s", yytext);}while(0)
-#define BEGIN yy_start_state = 1 +
-#define CURRENT_START_CONDITION (yy_start_state - 1)
-#define REJECT do{yy_pop_match();yy_buffer[yyindex] = yysave;yysave = 0;goto yy_handle_match;}while(0)
 #ifndef YYLMAX
 # define YYLMAX 10000
 #endif
@@ -36,8 +32,14 @@ private:
 	size_t	yyindex = 0;
 	bool	yynoflush = false;
 	char	yysave = 0;
+
 public:
 	size_t	yyleng = 0;
+
+	std::string yyline_begin;
+	size_t	yylineno = 1;
+	size_t	yycolno = 1;
+
 #ifdef YY_TEXT_ARRAY
 	char yytext[YYLMAX];
 #else
@@ -51,7 +53,8 @@ public:
 #else
 	int yylex();
 #endif
-	std::string text();
+	std::string		text();
+	std::istream	*get_stream();
 private:
 #ifdef YY_COMPLETE_SYMBOL
 	std::variant<int, std::pair<int, YYSTYPE> > internal_yylex();
@@ -59,10 +62,13 @@ private:
 	int internal_yylex();
 #endif
 	int		yy_read_more();
+public:
 	int		input(void);
 	int		unput(char c);
 	int		yymore();
 	int		yyless(int n);
+	int		yywrap();
+private:
 
 	void	yy_push_accept(yymatch m);
 	yymatch	yy_top_match();
@@ -70,7 +76,6 @@ private:
 	void	yy_pop_match();
 	void	yy_restore_save();
 	void	yy_flush_buffer();
-	int		yywrap();
 
 private:
 	static constexpr int yytransitions[][258] = %%[TRANSITIONS]%%;

@@ -153,11 +153,10 @@ std::pair<int, int> LexRegex::get_single_char_dup(char c) {
 std::pair<int, int> LexRegex::get_interval(const std::string & s) {
 
 	std::match_results< std::string ::const_iterator> m;
-	if (!(regw[R"(\{([1-9][0-9]*)(,([1-9][0-9]*)?)?})"](s, m)))
+	if (!(regw[R"(\{([0-9]+)(,([0-9]+)?)?})"](s, m)))
 		throw InvalidInterval();
 	std::pair<int, int> ret;
 	ret.first = std::stoi(m[1].str());
-	ret.second = ret.second;
 	if (m[2].matched)
 		ret.second = -1;
 	if (m[3].matched)
@@ -222,15 +221,9 @@ std::stack<LexRegex::token> LexRegex::tokenize(std::string s) {
 
 void LexRegex::parse(const std::string &regex) {
 	std::stack<token> s(tokenize(regex));
-//	try {
-		this->root = parse_alternation(s);
-		if (!s.empty())
-			unexpected(s);
-//	}
-//	catch (...)
-//	{
-//		std::throw_with_nested(std::runtime_error("invalid regex: " + regex));
-//	}
+    this->root = parse_alternation(s);
+    if (!s.empty())
+        unexpected(s);
 }
 
 LexRegex::node LexRegex::parse_terminal(std::stack<token> &s) {
